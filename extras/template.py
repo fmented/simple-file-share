@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 from io import BytesIO
-import json
-import os
+import os, json
 from threading import Thread
-import http.server
-import urllib.request, urllib.parse, urllib.error
-import html
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+import urllib.parse as urlparse
+from html import escape as html_escape
 from mimetypes import MimeTypes
-import cgi
-import pathlib
-import socket
-import stat
+from cgi import FieldStorage
+from pathlib import Path
+from stat import FILE_ATTRIBUTE_HIDDEN
 from socketserver import ThreadingMixIn
 from http import HTTPStatus
 
@@ -89,20 +87,17 @@ class FileInfo():
         ] 
 
     mimetypes = MimeTypes()
-
-    if not ('.docx' in mimetypes.types_map):
-        assign_mimetypes(mimetypes)
+    if not ('.docx' in mimetypes.types_map): assign_mimetypes(mimetypes)
 
     @staticmethod
     def has_hidden_attribute(file):
-        return bool(os.stat(file).st_file_attributes & stat.FILE_ATTRIBUTE_HIDDEN)
+        return bool(os.stat(file).st_file_attributes & FILE_ATTRIBUTE_HIDDEN)
 
     @staticmethod
     def is_hidden(file):
         name:str = os.path.basename(os.path.abspath(file))
         if os.name == 'nt':
             return FileInfo.has_hidden_attribute(file)
-
         return name.startswith('.')
 
     def __init__(self, basedir, file):
@@ -120,8 +115,8 @@ class FileInfo():
             self.type = self.mimetypes.guess_type(fullname)[0]
             self.size = os.path.getsize(fullname)
         
-        self.displayname = html.escape(displayname)
-        self.linkname= urllib.parse.quote(linkname)
+        self.displayname = html_escape(displayname)
+        self.linkname= urlparse.quote(linkname)
         self.hidden = self.is_hidden(fullname)
 
     @property
@@ -151,14 +146,13 @@ class FileCrawler():
         files = self.get_file_list(path)
         return [FileInfo(path, file) for file in files]
 
-    def serialize_filelist(self, list):
-        
+    def serialize_filelist(self, list):        
         return json.dumps([{**f.__dict__, **{"pretty_size":f.pretty_size}} for f in list])
 
     def crawl(self, path):
         return self.serialize_filelist(self.list_files(path))
 
-class Handler(http.server.SimpleHTTPRequestHandler): 
+class Handler(SimpleHTTPRequestHandler): 
     def __init__(self, request, client_address, server) -> None:
         self.crawler = FileCrawler()
         self.page = page
@@ -166,8 +160,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().__init__(request, client_address, server)
 
     def has_param(self, param:str):
-        o = urllib.parse.urlparse(self.path)
-        q = urllib.parse.parse_qs(o.query)
+        o = urlparse.urlparse(self.path)
+        q = urlparse.parse_qs(o.query)
         return param in q
 
     def is_streamable(self):
@@ -179,14 +173,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return self.has_param('stream') and streamable  
 
     def create_folder(self):
-        p = urllib.parse.unquote(urllib.parse.urlparse(self.path).path)
-        path = pathlib.Path(os.getcwd() + p)       
-        form = cgi.FieldStorage(fp=self.rfile, headers=self.headers, environ={'REQUEST_METHOD': 'POST'})
-        if 'name' not in form:
-            return (http.HTTPStatus.BAD_REQUEST, 'Field "name" not found')
-    
+        p = urlparse.unquote(urlparse.urlparse(self.path).path)
+        path = Path(os.getcwd() + p)       
+        form = FieldStorage(fp=self.rfile, headers=self.headers, environ={'REQUEST_METHOD': 'POST'})
+        if 'name' not in form: return (HTTPStatus.BAD_REQUEST, 'Field "name" not found')
         name = form.getvalue('name')
-
         try:
             os.mkdir(os.path.join(path, name))
             self.send_response(HTTPStatus.CREATED)
@@ -200,11 +191,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def receive_upload(self):
         result = (HTTPStatus.INTERNAL_SERVER_ERROR, 'Server error')
-        p = urllib.parse.unquote(urllib.parse.urlparse(self.path).path)
-        path = pathlib.Path(os.getcwd() + p)       
-        form = cgi.FieldStorage(fp=self.rfile, headers=self.headers, environ={'REQUEST_METHOD': 'POST'})
-        if 'files' not in form:
-            return (HTTPStatus.BAD_REQUEST, 'Field "files" not found')
+        p = urlparse.unquote(urlparse.urlparse(self.path).path)
+        path = Path(os.getcwd() + p)       
+        form = FieldStorage(fp=self.rfile, headers=self.headers, environ={'REQUEST_METHOD': 'POST'})
+        if 'files' not in form: return (HTTPStatus.BAD_REQUEST, 'Field "files" not found')
         
         fields = form['files']
         if not isinstance(fields, list):
@@ -212,7 +202,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         
         for field in fields:
             if field.file and field.filename:
-                filename = pathlib.Path(field.filename).name
+                filename = Path(field.filename).name
             else:
                 filename = None
             
@@ -231,25 +221,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         try:
             list = self.crawler.crawl(path)
             f = bytes(list, 'utf-8')
-            l = len(f)
             self.send_response(200)
             self.send_header('content-type', 'application/json')
-            self.send_header('content-length', str(l))
+            self.send_header('content-length', str(len(f)))
             self.end_headers()
-
             self.wfile.write(f)            
 
-        except:
-            self.send_error(HTTPStatus.FORBIDDEN, f"Cannot access {path}")
+        except: self.send_error(HTTPStatus.FORBIDDEN, f"Cannot access {path}")
         
     def send_favicon(self):
         f = bytes(self.page.favicon, 'utf-8')
-        l = len(f)
         self.send_response(200)
         self.send_header('content-type', 'image/svg+xml')
-        self.send_header('content-length', str(l))
+        self.send_header('content-length', str(len(f)))
         self.end_headers()
-
         self.wfile.write(f)      
 
     def log_request(self, format, *args): pass
@@ -257,28 +242,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/favicon.ico': return self.send_favicon()
         if self.has_param('updateList'): return self.send_json()
-        else:
-            try:
-                f = self.send_head()
-                if f:
-                    self.copyfile(f, self.wfile)
-                    f.close()  
-            except (ConnectionAbortedError, ConnectionResetError): pass
+        try:
+            f = self.send_head()
+            if f:
+                self.copyfile(f, self.wfile)
+                f.close()  
+        except (ConnectionAbortedError, ConnectionResetError): pass
                            
     def do_HEAD(self):
         f = self.send_head()
-        if f:
-            f.close()
+        if f: f.close()
  
     def do_POST(self):
-        if self.has_param('upload'):
-            self.receive_upload()
-        
-        elif self.has_param('newfolder'):
-            self.create_folder()
-            
-        else:
-            self.send_error(HTTPStatus.FORBIDDEN, 'Cannot POST to this URL')
+        if self.has_param('upload'): self.receive_upload()     
+        elif self.has_param('newfolder'): self.create_folder()       
+        else: self.send_error(HTTPStatus.FORBIDDEN, 'Cannot POST to this URL')
  
     def send_head(self):
         path = self.translate_path(self.path)
@@ -295,12 +273,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 if os.path.exists(index):
                     path = index
                     break
-            else:
-                return self.list_directory()
+            else: return self.list_directory()
 
         ctype = FileInfo.mimetypes.guess_type(path)[0]
-        try:
-            f = open(path, 'rb')
+        try: f = open(path, 'rb')
         except IOError:
             self.send_error(HTTPStatus.NOT_FOUND, f"{self.path} not found")
             return None
@@ -334,7 +310,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Last-Modified", self.date_time_string(fs.st_mtime))
         self.end_headers()
         return f
- 
 
     def send_error(self, code, message):
         self.send_response(code)
@@ -357,13 +332,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Content-Length', str(l))
         self.end_headers()
         self.wfile.write(page)
-        return None
 
-class CustomServer(ThreadingMixIn, http.server.HTTPServer):
+class CustomServer(ThreadingMixIn, HTTPServer):
     suppress_error = False
 
-    def handle_error(self, request: bytes, client_address):
-        if (not self.suppress_error): return super().handle_error(request, client_address)
+    def handle_error(self, *args):
+        if (not self.suppress_error): return super().handle_error(*args)
 
     def server_activate(self) -> None:
         Logger.log('\nCreating server .....')
@@ -387,36 +361,24 @@ def print_ip_address(port):
             x = re.findall('IPv4.*: (([0-9]|\.)*)', out)
             return [i[0] for i in x]
 
-        else:           
-            out1 = run('ip address')
-            out2 = run('ifconfig')
-            x = re.findall('inet (([0-9]|\.)*)', f'{out1}\n{out2}')
-            return [*set([i[0] for i in x])]
+        out1 = run('ip address')
+        out2 = run('ifconfig')
+        x = re.findall('inet (([0-9]|\.)*)', f'{out1}\n{out2}')
+        return [*set([i[0] for i in x])]
 
     Logger.log_ip = lambda t: Logger.log(f'   http://{t}'+ ('' if port == 80 else f':{port}'))
 
     ni = list(filter(lambda ip: ip != '127.0.0.1', get_ip()))
-    client = []
-    gate = []
+    client = []; gate = []
 
     for n in ni: gate.append(n) if n.endswith('.1') else client.append(n)
     if len(client) > 0: Logger.log('\nClient Address :'); [Logger.log_ip(ip) for ip in client]
     if len(gate) > 0: Logger.log('\nGateway Address :'); [Logger.log_ip(ip) for ip in gate]
     Logger.log('\nLoopback Address'); Logger.log_ip('127.0.0.1')
 
-def get_best_family(*address):
-    infos = socket.getaddrinfo(
-        *address,
-        type=socket.SOCK_STREAM,
-        flags=socket.AI_PASSIVE,
-    )
-    family, type, proto, canonname, sockaddr = next(iter(infos))
-    return family, sockaddr
-
-
 def create_server():
     Handler.protocol_version = "HTTP/1.1"
-    CustomServer.address_family, addr = get_best_family('0.0.0.0', PORT)
+    addr = ('0.0.0.0', PORT)
     httpd = CustomServer(addr, Handler)
     httpd.suppress_error = not DEBUG
     httpd.daemon = True
@@ -426,9 +388,8 @@ def create_server():
 
 def run():
     with create_server() as httpd:
-        try:
-            httpd.serve_forever()
-        except (KeyboardInterrupt, EOFError):
+        try: httpd.serve_forever()
+        except KeyboardInterrupt:
             httpd.shutdown()
             os.sys.exit(0)
 
@@ -459,8 +420,7 @@ def handle_os_error():
         msg = f"\nChange the port or close the previous program"
         andro_msg = f"\nChange the port or restart the application"
         Logger.log(f"\nPort {PORT} is already used")
-        andro = is_android()
-        Logger.log(andro_msg if andro else msg)
+        Logger.log(andro_msg if is_android() else msg)
     os.sys.exit(1)
 
 if __name__ == '__main__':
@@ -476,10 +436,9 @@ if __name__ == '__main__':
                             help='Specify alternative directory [default:current directory]')
 
     args = parser.parse_args()
-    if args.port:
-        PORT = args.port
 
-    if args.dir:
+    if args.port: PORT = args.port
+    if args.dir: 
         try: os.chdir(args.dir)
         except: pass
 
@@ -487,18 +446,16 @@ if __name__ == '__main__':
 
     if not is_android(): serve()
     else:      
-        init = False
-        fail = False
+        init = False; fail = False
 
+        # elevating directory equivalent to /sdcard to have less restricted access
         # most android app will set cwd to /data/user/0/PACKAGE_NAME/files/
         # which is very restricted if the phone is unrooted
-        # elevating directory to /sdcard to have less restricted access
         os.chdir('/storage/emulated/0')      
 
         class Wrapper(Thread):   
             def run(self):
-                global init
-                global fail
+                global init; global fail
                 try:
                     self.server = create_server()           
                     init = True
@@ -506,10 +463,8 @@ if __name__ == '__main__':
                 except PermissionError: 
                     handle_permission_error()
                     self.run()
-                except OSError: 
-                    fail = True
-                finally:
-                    init = True
+                except OSError: fail = True
+                finally: init = True
                        
             def stop(self):     
                 if fail : return
@@ -517,33 +472,30 @@ if __name__ == '__main__':
 
         t = Wrapper()
         t.start()    
+
         # hacky way to support android phone that cannot trigger KeyboardInterrupt
         # normally vol down button mapped to CTRL 
         # however just in case the volume button is broken or the app doesnt support it
         # user can still stop the server with just on-screen keyboard
         # stoping the server is necessary to close the socket connection
-        # otherwise the unclosed port wont be avilable until the app is closed and reopen
+        # otherwise the unclosed port wont be avilable until the app is closed and reopened
 
         def close(*args):
             t.stop()
             t.join()
             os.sys.exit(0)
 
-        # this part is to mitigate weird python behavior while doing input() and pressing [CTRL-C, CTRL-D]
+        # this part is to mitigate weird python behavior while doing input() and pressing CTRL-C
         # while pressing CTRL-C python didnt raise KeyboardInterrupt
         # but after pressing CTRL-C and followed by CTRL-D python did raise both
-        # however the exception below didnt catch any of them
-        # but if only CTRL-D is pressed, the exception below did catch EOFError
-        # signal is used to make sure user can stil stop the server using CTRL-C while doing 'input()' without weird behavior
+        # however the exception block below didnt catch any of them
+        # but if only CTRL-D is pressed, the exception block below did catch EOFError
 
         import signal
         signal.signal(signal.SIGINT, close)
 
-        while init==False: pass
-        if fail==False: 
+        while not init: pass
+        if not fail: 
             try: input("\nPress enter to stop the server\n")   
-            except (EOFError, KeyboardInterrupt): pass
-                
+            except (EOFError, KeyboardInterrupt): pass               
         close()  
-
-

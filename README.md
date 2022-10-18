@@ -13,7 +13,7 @@
 - run ```npm run extract```, ```src/iconlist.js``` should be created
 - run ```npm run build```
 - run ```npm run construct```
-- ```server.py``` should be created on root dir and ready to run
+- ```server.py``` should be created in root dir and ready to run
 
 ## dev
 - frontend : run ```npm run dev```

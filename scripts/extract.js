@@ -9,9 +9,7 @@ function extract(file) {
 }
 
 fs.readdir(directoryPath, function (err, files) {
-    if (err) {
-        return console.log('Unable to scan directory: ' + err);
-    } 
+    if (err) return console.log('Unable to scan directory: ' + err);  
     data = ''
     files.forEach(function (file) {
         data += `\n${extract(file)}`

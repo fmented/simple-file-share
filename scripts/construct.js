@@ -13,13 +13,11 @@ const template = fs.readFileSync(path.join(...[__dirname, ...'../extras/template
 const favicon = fs.readFileSync(path.join(...[__dirname, ...'../icons/favicon.svg'.split('/')]))
 
 function preprocessJS(str) {
-    s = String(str).replace(/\\n/g, '').replace(/\n/g, '')
-    return s
+    return String(str).replace(/\\n/g, '').replace(/\n/g, '')
 }
 
 function preprocessCSS(str) {
-    s = String(str).replace(/(\n|\t)/g, '')
-    return s
+    return String(str).replace(/(\n|\t)/g, '')
 }
 
 function preprocessJSON(str) {
@@ -38,8 +36,6 @@ function build(template, js, css, json, favicon) {
             .replace(/\$\$FAVICON/g, favicon)
 }
 
-
 const data = build(template, js, `${globalCss} ${css}`, mime, favicon)
 
 fs.writeFileSync(path.join(__dirname, '..' , 'server.py'), data)
-
