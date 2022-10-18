@@ -1,0 +1,117 @@
+html, body {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	--scrollbarBG: #222;
+	--thumbBG: #999;
+}
+
+body {
+	color: white;
+	margin: 0;
+	padding: 0 0;
+	box-sizing: border-box;
+	background-color: #333;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+	overflow: hidden;
+}
+
+*, *::before, *::after{
+	box-sizing: border-box;
+}
+
+
+*::-webkit-scrollbar {
+	width: 11px;
+	height: 11px;
+}
+* {
+	scrollbar-width: thin;
+	scrollbar-color: var(--thumbBG) var(--scrollbarBG);
+}
+
+*::-webkit-scrollbar-track {
+	background: var(--scrollbarBG);
+}
+
+*::-webkit-scrollbar-thumb {
+	background-color: var(--thumbBG) ;
+	border-radius: 6px;
+	border: 3px solid var(--scrollbarBG);
+}
+
+a {
+	color: #39f;
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:visited {
+	color: #27f;
+}
+
+label {
+	display: block;
+}
+
+.sr{
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0,0,0,0);
+	border: 0;
+}
+
+.btn{
+	padding: .5em 1em;
+	background-color: #39f;
+	color: white;
+	border-radius: .25em;
+	border: 1px solid white;
+	outline: 0;
+	cursor: pointer;
+	margin: 0;
+}
+
+.btn:disabled{
+	padding: .5em 1em;
+	background-color: #39f;
+	color: white;
+	border-radius: .25em;
+	border: 1px solid white;
+	outline: 0;
+	opacity: 30%;
+	cursor: not-allowed;
+}
+
+button:disabled{
+	opacity: 30%;
+}
+
+input[type=file]::file-selector-button, input[type=file]::-webkit-file-upload-button{
+	cursor: pointer;
+	padding: .5em 1em;
+	background-color: #39f;
+	color: white;
+	border-radius: .25em;
+	border: 1px solid white;
+	outline: 0;
+	margin: 0;
+}
+
+input, button{
+	font-family: inherit;
+	font-size: inherit;
+	-webkit-padding: 0.4em 0;
+	padding: 0.4em;
+	margin: 0 0 0.5em 0;
+	box-sizing: border-box;
+	border: 1px solid #ccc;
+	border-radius: 2px;
+}

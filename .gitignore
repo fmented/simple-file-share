@@ -1,0 +1,7 @@
+/node_modules/
+/public/build/
+/icons/*.svg
+.DS_Store
+/src/iconlist.js
+/*.py
+__pycache__
